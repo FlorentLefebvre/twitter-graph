@@ -121,13 +121,14 @@ Fetch a list of targets from Twitter API.
 
 Options:
   -h --help                   Show this screen.
-  --max-tweets-count <type>   Maximum number of tweets to fetch before stopping. [default: 2500].
+  --max-tweets-count <type>   Maximum number of tweets to fetch before stopping. [default: 250000].
   --graph-nodes <type>        Nodes to consider in the graph: friends, followers or all. [default: followers].
-  --edges-ratio <ratio>       Ratio of edges to export in the graph (chosen randomly among non-mutuals). [default: 1].
   --credentials <file>        Path of the credentials for Twitter API [default: credentials.json].
   --excluded <file>           Path of the list of excluded users [default: excluded.json].
   --out <path>                Directory of output files [default: out].
   --run-http-server           Run an HTTP server to visualize the graph in you browser with d3.js.
+  --save_frequency <type>     Number of account between each save in cache. [default: 100].
+  --filtering <type>          Filter to include only a subset of information for each account: full, light, minimum [default: full]
 """
 ```
 
@@ -157,6 +158,7 @@ Found 200/200 tweets.
 
 Since Twitter limits the rate of its API to 15 requests per window of 15 minutes, this is going to take a while.
 In order to interrupt and resume the requests at any time, a very simple caching system immediately exports the requests results to a local json file.
+The frequency of this export is determined by the "save_frequency" argument. A too low value can result in performance issues during "big" graphs.
 
 ```
 KeyboardInterrupt
@@ -178,6 +180,15 @@ You reached the rate limit. Disable --stop-on-rate-limit or try again later.
 Successfully exported 2406 nodes to out\graph.nodes.csv.
 Successfully exported 128 edges to out\graph.edges.csv.
 ```
+
+For cleaning and storage issue, you can determine what column will be contained in nodes.csv with the `--filtering` option.
+* `--filtering=full` will copy all data receive from twitter for each node
+* `--filtering=light` will copy: "name","screen_name","followers_count","friends_count","created_at","default_profile_image","description","Label"
+* `--filtering=minimum` is the same as `light` without the description column.
+
+Note: the full nodes.csv is about 10 time the size of the light version.  
+The description column can result in few errors during the import on gephi. 
+Could be resolved with removing the column, directly in the csv or re-exporting in `minimum` mode.
 
 Finally, note that you can skip an account by filling out the `exclude.json` file.
 
