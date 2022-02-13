@@ -14,6 +14,7 @@ Options:
   --excluded <file>           Path of the list of excluded users [default: excluded.json].
   --out <path>                Directory of output files [default: out].
   --run-http-server           Run an HTTP server to visualize the graph in you browser with d3.js.
+  --save_frequency <type>     Number of account between each save in cache. [default: 100].
 """
 from functools import partial
 from time import sleep
@@ -74,7 +75,7 @@ def fetch_users(apis, target, are_users, nodes_to_considere, max_tweets_count, o
                 try:
                     print("Using {} cursor.".format(next_cursor))
                     next_cursor, previous_cursor, new_followers, = apis[api_idx].GetFollowersPaged(screen_name=target, count=200, cursor=next_cursor)
-                    followers += [user.__dict__ for user in new_followers]
+                    followers += [item._json for user in new_followers]
                     print("Found {} followers.".format(len(followers)))
                 except twitter.error.TwitterError as e:
                     if not isinstance(e.message, str) and e.message[0]["code"] == TWITTER_RATE_LIMIT_ERROR:
@@ -106,8 +107,7 @@ def fetch_users(apis, target, are_users, nodes_to_considere, max_tweets_count, o
     all_users = followers + [user for user in friends if user["id"] not in followers_ids]
     return followers, friends, mutuals, all_users
 
-
-def fetch_friendships(apis, users, excluded, out, target, friends_restricted_to=None, friendships_file="cache/friendships.json"):
+def fetch_friendships(apis, users, excluded, out, target, save_frequency=100, friends_restricted_to=None, friendships_file="cache/friendships.json"):
     """
         Fetch the friends of a list of users from Twitter API
     :param List[twitter.Api] apis: a list of Twitter API instances
@@ -153,7 +153,7 @@ def fetch_friendships(apis, users, excluded, out, target, friends_restricted_to=
             common_friends = set(user_friends).intersection(users_ids)
             friendships[str(user["id"])] = list(common_friends)
             # Write to file
-            if (i % 100) == 0:
+            if i % save_frequency == 0:
                 get_or_set(out / target / friendships_file, friendships.copy(), force=True)
     get_or_set(out / target / friendships_file, friendships, force=True)
     return friendships
@@ -272,9 +272,8 @@ def main():
                                                                  Path(options["--out"]))
             users = {"followers": followers, "friends": friends, "all": all_users,
                      "few": random.choices(followers, k=min(100, len(followers)))}[options["--graph-nodes"]]
-            friendships = fetch_friendships(apis, users, Path(options["--excluded"]), Path(options["--out"]), target, all_users)
-            save_to_graph(users, friendships, Path(options["--out"]), target,
-                          edges_ratio=float(options["--edges-ratio"]), protected_users=mutuals)
+            friendships = fetch_friendships(apis, users, Path(options["--excluded"]), Path(options["--out"]), target, int(options["--save_frequency"]), friends_restricted_to=all_users)
+            save_to_graph(users, friendships, Path(options["--out"]), target, protected_users=mutuals)
     except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout) as e:
         print(e)  # Why do I get these?
         main()  # Retry!
