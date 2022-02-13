@@ -142,6 +142,8 @@ def fetch_friendships(apis, users, excluded, out, target, save_frequency=100, fr
                     while previous_cursor != next_cursor and next_cursor != 0:
                         next_cursor, previous_cursor, new_user_friends,  = apis[api_idx].GetFriendIDsPaged(user_id=user["id"], stringify_ids=True, cursor=next_cursor)
                         user_friends = user_friends + new_user_friends
+                        if not user_friends:
+                            user_friends = [""]
                 except twitter.error.TwitterError as e:
                     if not isinstance(e.message, str) and e.message[0]["code"] == TWITTER_RATE_LIMIT_ERROR:
                         api_idx = (api_idx + 1) % len(apis)
