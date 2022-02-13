@@ -57,7 +57,7 @@ def fetch_users(apis, target, are_users, nodes_to_considere, max_tweets_count, o
     """
     if not are_users:
         tweets = get_or_set(out_path / target / tweets_file,
-                            partial(fetch_tweets, search_query=target, api=apis[20], max_count=max_tweets_count),
+                            partial(fetch_tweets, search_query=target, apis=apis, max_count=max_tweets_count),
                             api_function=True)
         print("Found {} tweets.".format(len(tweets)))
         followers = [{**tweet["user"], "query_created_at": tweet["created_at"]} for tweet in tweets]
@@ -75,7 +75,7 @@ def fetch_users(apis, target, are_users, nodes_to_considere, max_tweets_count, o
                 try:
                     print("Using {} cursor.".format(next_cursor))
                     next_cursor, previous_cursor, new_followers, = apis[api_idx].GetFollowersPaged(screen_name=target, count=200, cursor=next_cursor)
-                    followers += [item._json for user in new_followers]
+                    followers += [user._json for user in new_followers]
                     print("Found {} followers.".format(len(followers)))
                 except twitter.error.TwitterError as e:
                     if not isinstance(e.message, str) and e.message[0]["code"] == TWITTER_RATE_LIMIT_ERROR:
@@ -92,7 +92,7 @@ def fetch_users(apis, target, are_users, nodes_to_considere, max_tweets_count, o
                 try:
                     print("Using {} cursor.".format(next_cursor))
                     next_cursor, previous_cursor, new_friends, = apis[api_idx].GetFriendsPaged(screen_name=target, count=200, cursor=next_cursor)
-                    friends += [user.__dict__ for user in new_friends]
+                    friends += [user._json for user in new_friends]
                     print("Found {} friends.".format(len(friends)))
                 except twitter.error.TwitterError as e:
                     if not isinstance(e.message, str) and e.message[0]["code"] == TWITTER_RATE_LIMIT_ERROR:
@@ -101,6 +101,8 @@ def fetch_users(apis, target, are_users, nodes_to_considere, max_tweets_count, o
                         sleep(1)
                     else:
                         print("...but it failed. Error: {}".format(e))
+            get_or_set(out_path / target / friends_file, friends, force=True)
+
 
     followers_ids = [user["id"] for user in followers]
     mutuals = [user["id"] for user in friends if user["id"] in followers_ids]
@@ -159,17 +161,27 @@ def fetch_friendships(apis, users, excluded, out, target, save_frequency=100, fr
     return friendships
 
 
-def fetch_tweets(search_query, api, max_count=1000000):
-    all_tweets, max_id = [], None
-    max_id = 1465765276570591245
+def fetch_tweets(search_query, apis, max_count=1000000):
+    all_tweets, tweets, max_id = [], [], None
+    max_id = 0
+    api_idx = 0
     while len(all_tweets) < max_count:
-        tweets = api.GetSearch(term=search_query,
-                               count=100,
-                               result_type="recent",
-                               #until="2021-11-29",
-                               #since_id=1465930821580341250,
-                               #since="2021-12-01",
-                               max_id=max_id)
+        try:
+            tweets = apis[api_idx].GetSearch(term=search_query,
+                                   count=100,
+                                   result_type="recent",
+                                   #until="2022-01-16",
+                                   #since_id=1465930821580341250,
+                                   # since="2021-12-01",
+                                   max_id=max_id)
+        except twitter.error.TwitterError as e:
+            if not isinstance(e.message, str) and e.message[0]["code"] == TWITTER_RATE_LIMIT_ERROR:
+                api_idx = (api_idx + 1) % len(apis)
+                print(f"You reached the rate limit. Moving to next api: #{api_idx}")
+            else:
+                print("...but it failed. Error: {}".format(e))
+                user_friends = [""]
+
         all_tweets.extend(tweets)
         print(f"Found {len(all_tweets)}/{max_count} tweets.")
         if len(tweets) < 100:
