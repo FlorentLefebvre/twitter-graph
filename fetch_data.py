@@ -9,12 +9,12 @@ Options:
   -h --help                   Show this screen.
   --max-tweets-count <type>   Maximum number of tweets to fetch before stopping. [default: 250000].
   --graph-nodes <type>        Nodes to consider in the graph: friends, followers or all. [default: followers].
-  --edges-ratio <ratio>       Ratio of edges to export in the graph (chosen randomly among non-mutuals). [default: 1].
   --credentials <file>        Path of the credentials for Twitter API [default: credentials.json].
   --excluded <file>           Path of the list of excluded users [default: excluded.json].
   --out <path>                Directory of output files [default: out].
   --run-http-server           Run an HTTP server to visualize the graph in you browser with d3.js.
   --save_frequency <type>     Number of account between each save in cache. [default: 100].
+  --filtering <type>          Filter to include only a subset of information for each account: full, light, minimum [default: full]
 """
 from functools import partial
 from time import sleep
@@ -29,6 +29,8 @@ from pathlib import Path
 
 
 TWITTER_RATE_LIMIT_ERROR = 88
+COLUMNS_TO_EXPORT_MINIMUM = ["name","screen_name","followers_count","friends_count","created_at","default_profile_image","description","Label"]
+COLUMNS_TO_EXPORT_LIGHT = ["description"]
 
 
 def fetch_users(apis, target, are_users, nodes_to_considere, max_tweets_count, out_path,
@@ -225,39 +227,30 @@ def dumper(obj):
     except:
         return obj.__dict__
 
-def save_to_graph(users, friendships, out_path, target, edges_ratio=1.0, protected_users=None):
+def save_to_graph(users, friendships, out_path, target, filtering):
     columns = [field for field in users[0] if field not in ["id", "id_str"]]
     nodes = {user["id_str"]: [user.get(field, "") for field in columns] for user in users}
     users_df = pd.DataFrame.from_dict(nodes, orient='index', columns=columns)
     users_df["Label"] = users_df["name"]
     out_path.parent.mkdir(parents=True, exist_ok=True)
     nodes_path = out_path / target / "nodes.csv"
-    users_df.to_csv(nodes_path, index_label="Id")
-    print("Successfully exported {} nodes to {}.".format(users_df.shape[0], nodes_path))
-    users_ids = [user["id_str"] for user in users]
-
-    if edges_ratio < 1:
-        protected_users = [user["id_str"] for user in protected_users] if protected_users else []
-        edges, protected_edges = [], []
-        for source, source_friends in friendships.items():
-            if source not in users_ids:
-                continue
-            if source in protected_users:
-                protected_edges += [[source, target] for target in source_friends if target in users_ids]
-            else:
-                edges += [[source, target] for target in source_friends if target in users_ids]
-        edges = random.choices(edges, k=int(edges_ratio * len(edges)))
-        edges += protected_edges
+    if filtering == "full":
+        users_df.to_csv(nodes_path, index_label="Id")
     else:
-        print("Start calculated edge")
-        edges = [[source, target] for source, source_friends in friendships.items() if source in users_ids
-                 for target in source_friends if target in users_ids]
-        print("finish calculated edge")
+        columns_to_export = []
+        if filtering == "light":
+            columns_to_export = COLUMNS_TO_EXPORT_MINIMUM + COLUMNS_TO_EXPORT_LIGHT
+        elif filtering == "minimum":
+            columns_to_export = COLUMNS_TO_EXPORT_MINIMUM
+        users_df.to_csv(nodes_path, index_label="Id", columns=columns_to_export)
 
-    print("create datafram")
-    edges_df = pd.DataFrame(edges, columns=['Source', 'Target'])
+    print("Successfully exported {} nodes to {}.".format(users_df.shape[0], nodes_path))
+
+    print("Start calculated edge")
+    edges_df = pd.DataFrame.from_dict(friendships, orient='index')
+    edges_df = edges_df.stack().to_frame().reset_index().drop('level_1', axis=1)
+    edges_df.columns = ['Source', 'Target']
     edges_path = out_path / target / "edges.csv"
-    print("to csv")
     edges_df.to_csv(edges_path)
     print("Successfully exported {} edges to {}.".format(edges_df.shape[0], edges_path))
 
@@ -287,7 +280,7 @@ def main():
             users = {"followers": followers, "friends": friends, "all": all_users,
                      "few": random.choices(followers, k=min(100, len(followers)))}[options["--graph-nodes"]]
             friendships = fetch_friendships(apis, users, Path(options["--excluded"]), Path(options["--out"]), target, int(options["--save_frequency"]), friends_restricted_to=all_users)
-            save_to_graph(users, friendships, Path(options["--out"]), target, protected_users=mutuals)
+            save_to_graph(users, friendships, Path(options["--out"]), target, options["--filtering"] )
     except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout) as e:
         print(e)  # Why do I get these?
         main()  # Retry!
