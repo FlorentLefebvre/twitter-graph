@@ -227,7 +227,7 @@ def dumper(obj):
     except:
         return obj.__dict__
 
-def save_to_graph(users, friendships, out_path, target, filtering):
+def save_to_graph(users, friendships, out_path, target, filtering, edges_ratio=1.0):
     columns = [field for field in users[0] if field not in ["id", "id_str"]]
     nodes = {user["id_str"]: [user.get(field, "") for field in columns] for user in users}
     users_df = pd.DataFrame.from_dict(nodes, orient='index', columns=columns)
@@ -239,7 +239,7 @@ def save_to_graph(users, friendships, out_path, target, filtering):
     else:
         columns_to_export = []
         if filtering == "light":
-            columns_to_export = COLUMNS_TO_EXPORT_MINIMUM + COLUMNS_TO_EXPORT_LIGHT
+            columns_to_export = COLUMNS_TO_EXPORT_LIGHT + COLUMNS_TO_EXPORT_MINIMUM
         elif filtering == "minimum":
             columns_to_export = COLUMNS_TO_EXPORT_MINIMUM
         users_df.to_csv(nodes_path, index_label="Id", columns=columns_to_export)
@@ -250,6 +250,8 @@ def save_to_graph(users, friendships, out_path, target, filtering):
     edges_df = pd.DataFrame.from_dict(friendships, orient='index')
     edges_df = edges_df.stack().to_frame().reset_index().drop('level_1', axis=1)
     edges_df.columns = ['Source', 'Target']
+    if edges_ratio != 1.0:
+        edges_df = edges_df.sample(frac = edges_ratio)
     edges_path = out_path / target / "edges.csv"
     edges_df.to_csv(edges_path)
     print("Successfully exported {} edges to {}.".format(edges_df.shape[0], edges_path))
