@@ -29,7 +29,7 @@ from pathlib import Path
 
 
 TWITTER_RATE_LIMIT_ERROR = 88
-COLUMNS_TO_EXPORT_MINIMUM = ["name","screen_name","followers_count","friends_count","created_at","default_profile_image","description","Label"]
+COLUMNS_TO_EXPORT_MINIMUM = ["name","screen_name","followers_count","friends_count","created_at","default_profile_image","Label"]
 COLUMNS_TO_EXPORT_LIGHT = ["description"]
 
 
